@@ -29,8 +29,8 @@ only used to test the simulator.
 | Board pose recovered from the demos alone | square size **39.97 / 40.43 mm** (left/right arm, true 40 mm), median fingertip error **≈5 mm** |
 | Naive retargeting (copy the hand path) | **27.7 %** of 675 demos succeed on the Panda |
 | Object-centric retargeting (keeps the human's timing, path and yaw) | **99.9 %** succeed (674 / 675) |
-| Board-symmetry augmentation | 469 human demos → **3 015** sim-verified training episodes (augmented copies succeed as often as originals: 94.3 % vs 93.6 %) |
-| Policy trained on them, closed loop | **77 % / 78 % / 70 %** on seen tasks / unseen square pairs / squares never seen in training (flat square embeddings: 0 % on unseen squares; no augmentation: ≤ 22 %) |
+| Board-symmetry augmentation | 499 human demos → **3 195** sim-verified training episodes (augmented copies succeed as often as originals: 99.9 % vs 99.3 %) |
+| Policy trained on them, closed loop | **85 % / 78 % / 70 %** on seen tasks / unseen square pairs / squares never seen in training (flat square embeddings: 0 % on unseen squares; no augmentation: ≤ 18 %) |
 | Whole game | Morphy's *Opera Game* (1858), 33 plies played with my recorded hand motions: **34 / 34** piece moves, **no interventions**, on each of 10 random choices of which demo is replayed per move |
 
 ---
@@ -171,9 +171,19 @@ because the human trajectory lives in board coordinates the whole motion moves w
 (`chessbot/augment.py`). Each demo was re-anchored to 4 random symmetric copies and every copy
 was replayed on the Panda; only successful rollouts were kept.
 
-* 3 375 rollouts → 3 178 successful; 3 015 in the training split (469 human + 2 546 augmented).
-* Augmented copies succeed at the same rate as the originals (94.3 % vs 93.6 %), which is a
+* 3 375 rollouts → 3 366 successful; 3 195 in the training split (499 human + 2 696 augmented).
+* Augmented copies succeed at the same rate as the originals (99.9 % vs 99.3 %), which is a
   useful check that the re-anchoring preserves motion quality.
+
+The training rollouts differ from the replays in two ways, both removing something the
+instruction cannot tell a policy:
+
+* **They start at the pre-grasp funnel**, not a second earlier. Where my hand rested before
+  reaching was on average 18 cm from the piece, and off the board in over half the demos.
+* **The sign of the gripper yaw is canonicalised.** Which hand demonstrated decides it: left-hand
+  demos grasp at about −0.9 rad, right-hand ones at +0.7, and mirrored copies flip it. Within one
+  instruction the grasp yaw varied by 1.36 rad (median). Episodes that grasp at negative yaw have
+  their whole yaw track mirrored, keeping the size and timing of my wrist turn.
 
 **Held-out evaluation** (`chessbot/splits.py`): six squares (b6, c3, d7, e2, f5, g4) never
 appear in training, as source or destination, and ~10 % of (piece, source, destination)
@@ -194,13 +204,13 @@ seed each (with n = 60 the standard error is about ±6 points):
 
 | Policy | Training episodes | Seen tasks | Unseen square pairs | Unseen squares |
 |---|---|---|---|---|
-| *Retargeted human replay (reference, not a policy)* | | *88.3 %* | *91.7 %* | *98.3 %* |
-| **Augmented · factorised squares** | 3 015 | **76.7 %** | **78.3 %** | **70.0 %** |
-| Augmented · flat squares | 3 015 | 63.3 % | 50.0 % | 0.0 % |
-| Human only · factorised squares | 469 | 21.7 % | 5.0 % | 5.0 % |
-| Human only · flat squares | 469 | 18.3 % | 0.0 % | 0.0 % |
+| *Retargeted human replay (reference, not a policy)* | | *100 %* | *100 %* | *100 %* |
+| **Augmented · factorised squares** | 3 195 | **85.0 %** | **78.3 %** | **70.0 %** |
+| Augmented · flat squares | 3 195 | 60.0 % | 43.3 % | 0.0 % |
+| Human only · factorised squares | 499 | 16.7 % | 0.0 % | 3.3 % |
+| Human only · flat squares | 499 | 18.3 % | 0.0 % | 0.0 % |
 
-Two things stand out. **Augmentation is what makes learning work**: 469 human demonstrations, one
+Two things stand out. **Augmentation is what makes learning work**: 499 human demonstrations, one
 per move, are far too few for a policy to learn where 64 squares are, while their symmetric copies
 are enough. And **the square encoding decides generalisation**: with one embedding per square, a
 square never seen in training is simply unknown (0 %); composing it from a seen file and a seen
@@ -259,6 +269,14 @@ were never meant to thread between neighbours.
   individual failures (contacts, joint torques) found them; tuning the retargeter would not have.
 * Crowded full boards are harder than the sparse boards in the demos; the game script counts
   every intervention (now zero, but the margin around neighbours is a few millimetres).
+* Training the policy on the replays as they were. Once the simulator was fixed, the factorised
+  policy fell to 33 % on seen tasks, against 85 % now. Rollouts began wherever my hand happened
+  to rest, and the grasp yaw had two modes the instruction cannot distinguish (which hand
+  demonstrated), so a regression policy averaged them and approached at a yaw no demo used. A
+  policy that can represent several modes (diffusion or a discretised action head) would be the
+  principled fix; canonicalising the data was the quick one. (Before the simulator fixes, the
+  same recipe gave 77 %; I suspect the buggy, uncoupled fingers forgave misaligned grasps, but did
+  not verify it.)
 
 **Limitations**
 * The compact policy reads a parsed instruction and proprioception, not images; SmolVLA is the
@@ -305,6 +323,6 @@ chessbot/
 scripts/                              one script per step above
 notebooks/smolvla_colab.ipynb         SmolVLA fine-tuning and evaluation on Colab
 calib/                                fitted board calibrations
-artifacts/train_rollouts.jsonl.gz     the 3 015 sim-verified training rollouts
+artifacts/train_rollouts.jsonl.gz     the 3 195 sim-verified training rollouts
 docs/                                 figures
 ```
