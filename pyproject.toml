@@ -1,0 +1,24 @@
+[project]
+name = "chessbot"
+version = "0.1.0"
+description = "Teaching a simulated Panda to play chess from Meta Quest 3 hand-tracking demonstrations"
+requires-python = ">=3.10"
+dependencies = [
+    "mujoco>=3.2",
+    "numpy",
+    "chess",
+    "imageio",
+    "imageio-ffmpeg",
+    "pillow",
+]
+
+[project.optional-dependencies]
+train = ["torch>=2.2"]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["chessbot"]
