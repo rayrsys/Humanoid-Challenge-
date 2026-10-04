@@ -104,10 +104,11 @@ Everything a human contributes survives: *when* to grasp and release, the transp
 speed profile, and the wrist yaw. Only the last few centimetres of contact are adapted to the
 gripper.
 
-### The last 5 %: simulator bugs, not retargeting
+### The last 5 %: debugging the simulator, the controller and the motion
 
 At 94.8 % I traced every remaining failure step by step (contacts, finger joints, joint torques).
-Almost none were retargeting problems:
+Some were bugs in the simulator and its controller; the rest were places where the retargeted
+motion asked more of the arm than it could do:
 
 | Fix (all 675 episodes, in the order I made them) | Success | What was wrong |
 |---|---|---|
@@ -259,6 +260,9 @@ were never meant to thread between neighbours.
 * **Object-centric retargeting**: keeping the human's timing and path, adapting only contact.
 * **Symmetry augmentation verified in simulation**, and **factorised square embeddings** for
   generalising to squares never seen in training.
+* **Following single failures to their cause** (contacts, finger joints, joint torques) instead of
+  tuning parameters: it found every bug in section 3 and both policy-data problems.
+* Executing the policy's gripper output as **closed or open**, like every demo.
 
 **Didn't work, or only partly**
 * Grasp detection from finger closure alone: it fails on pinch grasps (the fingers barely move
@@ -267,17 +271,17 @@ were never meant to thread between neighbours.
 * Pure contact physics for carrying pieces: see the grasp stabiliser note.
 * The first object-centric version opened the gripper while the arm was still moving (54 %).
 * Trusting my simulator: the last 5 % of retargeting failures, and every intervention in the full
-  game, were bugs in the finger coupling and the arm controller, not in the method. Tracing
-  individual failures (contacts, joint torques) found them; tuning the retargeter would not have.
+  game, came from simulator and controller bugs (finger coupling, stepped joint setpoints) or from
+  asking the arm to move faster and lower than it could follow. Tracing individual failures
+  (contacts, joint torques) found them; tuning the retargeter's parameters would not have.
 * Crowded full boards are harder than the sparse boards in the demos; the game script counts
   every intervention (now zero, but the margin around neighbours is a few millimetres).
 * Training the policy on the replays as they were. Once the simulator was fixed, the factorised
   policy fell to 33 % on seen tasks (85 % after the fix, same evaluation). Rollouts began wherever
   my hand happened to rest, and the grasp yaw had two modes the instruction cannot distinguish
   (which hand demonstrated), so a regression policy averaged them and approached at a yaw no demo
-  used. A
-  policy that can represent several modes (diffusion or a discretised action head) would be the
-  principled fix; canonicalising the data was the quick one. (Before the simulator fixes, the
+  used. A policy that can represent several modes (diffusion or a discretised action head) would
+  be the principled fix; canonicalising the data was the quick one. (Before the simulator fixes, the
   same recipe gave 77 %; I suspect the buggy, uncoupled fingers forgave misaligned grasps, but did
   not verify it.)
 
