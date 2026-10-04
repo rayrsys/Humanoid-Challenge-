@@ -8,3 +8,4 @@ outputs/*
 *.egg-info/
 .pytest_cache/
 checkpoints/
+data
