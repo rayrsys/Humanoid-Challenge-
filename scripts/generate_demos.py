@@ -136,7 +136,10 @@ def main():
     print("kept by split:", Counter(r["split"] for r in kept))
     with open(args.out, "wb") as f:
         pickle.dump(recs, f)
-    print("wrote", args.out)
+    from chessbot.rollouts import save_slim
+    slim = args.out.replace(".pkl", "") + ".jsonl.gz"
+    save_slim([r for r in recs if r["success"] and r["split"] == "train"], slim)
+    print("wrote", args.out, "and", slim)
 
 
 if __name__ == "__main__":

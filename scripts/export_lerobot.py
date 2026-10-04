@@ -14,7 +14,6 @@ front (agent-view) and wrist cameras on. Features:
 from __future__ import annotations
 
 import argparse
-import pickle
 import shutil
 from pathlib import Path
 
@@ -36,11 +35,12 @@ def main():
     ap.add_argument("--push", action="store_true")
     args = ap.parse_args()
 
+    import chess
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
     from chessbot.env import ChessEnv
+    from chessbot.rollouts import load_records
 
-    with open(args.demos, "rb") as f:
-        recs = [r for r in pickle.load(f) if r["success"] and r["split"] in args.splits]
+    recs = [r for r in load_records(args.demos) if r["success"] and r["split"] in args.splits]
     if args.human_only:
         recs = [r for r in recs if tuple(r["transform"]) == (0, 0, False)]
     if args.limit:
@@ -75,14 +75,17 @@ def main():
                 "action": env.cmd.astype(np.float32),
                 "task": r["task"],
             })
-        import chess
-        if env.check_move(chess.Move.from_uci(r["src"] + r["dst"])).success != r["success"]:
+        # Replays are deterministic, but stored actions are rounded: only keep
+        # episodes that succeed again here, so no failure enters the dataset.
+        if not env.check_move(chess.Move.from_uci(r["src"] + r["dst"])).success:
             mismatches += 1
+            ds.clear_episode_buffer()
+            continue
         ds.save_episode()
         if i % 50 == 0:
             print(f"  {i}/{len(recs)}", flush=True)
     ds.finalize()
-    print(f"wrote {root} ({mismatches} replays disagreed with the stored outcome)")
+    print(f"wrote {root} ({mismatches} episodes dropped because their replay did not succeed)")
     if args.push:
         ds.push_to_hub()
 
