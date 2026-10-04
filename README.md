@@ -10,6 +10,16 @@ The interesting part is the gap between the two embodiments: a five-fingered hum
 pinches crowns and wraps around knights, versus a two-finger gripper with a 21 cm palm. The
 pipeline closes that gap step by step and measures each step.
 
+| Taken from my recordings | Adapted for the Panda |
+|---|---|
+| every task: the instruction, starting position and move | the last ~0.6 s before each grasp and release: hover, vertical descent, pause, close/open (a gripper cannot copy a Dex3 contact) |
+| where the board was (fitted from my wrist poses alone) | clearance above neighbouring pieces while the gripper is open |
+| the hand's path, timing and speed profile, when it grasps and releases, and the wrist yaw | speed capped at the Panda's limits, and a short transit from wherever the arm is to the start of the motion |
+
+The policies train only on my demonstrations (retargeted, plus board-symmetric copies of the same
+motions), and the full game replays them. The scripted pick-and-place in `chessbot/oracle.py` is
+only used to test the simulator.
+
 <p align="center"><img src="docs/fig_teleop_vs_panda.png" width="760"></p>
 
 **Headline results**
@@ -17,11 +27,11 @@ pipeline closes that gap step by step and measures each step.
 | | |
 |---|---|
 | Board pose recovered from the demos alone | square size **39.97 / 40.43 mm** (left/right arm, true 40 mm), median fingertip error **≈5 mm** |
-| Naive retargeting (copy the hand path) | **30.8 %** of 675 demos succeed on the Panda |
-| Object-centric retargeting (keeps the human's timing, path and yaw) | **94.8 %** succeed |
+| Naive retargeting (copy the hand path) | **27.7 %** of 675 demos succeed on the Panda |
+| Object-centric retargeting (keeps the human's timing, path and yaw) | **99.9 %** succeed (674 / 675) |
 | Board-symmetry augmentation | 469 human demos → **3 015** sim-verified training episodes (augmented copies succeed as often as originals: 94.3 % vs 93.6 %) |
 | Policy trained on them, closed loop | **77 % / 78 % / 70 %** on seen tasks / unseen square pairs / squares never seen in training (flat square embeddings: 0 % on unseen squares; no augmentation: ≤ 22 %) |
-| Whole game | Morphy's *Opera Game* (1858), 33 plies played with my recorded hand motions: 29 / 34 piece moves succeed unassisted, 6 interventions |
+| Whole game | Morphy's *Opera Game* (1858), 33 plies played with my recorded hand motions: **34 / 34** piece moves, **no interventions**, on each of 10 random choices of which demo is replayed per move |
 
 ---
 
@@ -73,8 +83,8 @@ on the Panda's board (`chessbot/retarget.py`).
 | | Naive | Object-centric |
 |---|---|---|
 | What it does | scale the fingertip path to the Panda board, gripper yaw from the wrist heading, gripper width from hand closure | keep the human's **timing, path shape and yaw**; pin the grasp/release keyframes to the piece; Panda-specific contact funnels |
-| Success (675 episodes) | **30.8 %** | **94.8 %** |
-| Main failure | piece dropped on the wrong square (238), off-centre (141), never released (75) | not released (17), off-centre (10) |
+| Success (675 episodes) | **27.7 %** | **99.9 %** |
+| Failures | wrong square (239), off-centre (151), dropped in transit (82), tipped over (8), stuck to a finger (7) | off-centre (1) |
 
 The naive version fails for reasons that are informative about the embodiment gap:
 a dexterous hand approaches a piece diagonally from the side, which a parallel gripper does with a
@@ -94,6 +104,22 @@ Everything a human contributes survives: *when* to grasp and release, the transp
 speed profile, and the wrist yaw. Only the last few centimetres of contact are adapted to the
 gripper.
 
+### The last 5 %: simulator bugs, not retargeting
+
+At 94.8 % I traced every remaining failure step by step (contacts, finger joints, joint torques).
+Almost none were retargeting problems:
+
+| Fix (all 675 episodes, in the order I made them) | Success | What was wrong |
+|---|---|---|
+| starting point | 94.8 % | |
+| keep the fingers coupled | 96.3 % | resetting the grasp welds also switched off Menagerie's equality that couples the two fingers, so one finger could stay pinned to a piece while the other opened, and carry it away |
+| cap speed at the Panda's limits | 95.3 % | a human hand is faster than the arm; the rate limiter then cut corners and came down onto tall pieces before the hand was over them (13 → 0 such failures), but more placements on rank 1 now hit the next bug (5 → 20) |
+| warm-start IK from the commanded joints | 96.7 % | near rank 1 the shoulder is close to a singularity (joints 1 and 3 aligned); solving from the measured state fed the arm's own tracking error back into its target |
+| ramp joint setpoints over each 50 ms step | 99.3 % | stepping them saturated the 87 Nm shoulder joints, which disables the integrator's implicit damping: the pair chattered and placements landed ~2 cm off |
+| hover above the tallest neighbour | 99.9 % | the open fingers could dip beside a neighbour before the pre-grasp funnel |
+| transit from the arm's current pose | 99.9 % | the first target of a move could be 50 cm from where the last one ended (matters in the game, not in single-move replays) |
+
+
 ## 4. The simulator
 
 There is no chessboard in LIBERO, and chess needs millimetre-level placement on 64 named
@@ -110,6 +136,9 @@ Designing for the Panda hand forced some decisions:
   33 mm of it. The first king design was pressed into the board by the palm.
 * **Yaw matters on a crowded board.** The palm is 21 cm long along the finger axis; picking a
   bishop next to a king means rotating the gripper so the palm clears it (`chessbot/oracle.py`).
+* **Controller details matter.** IK is warm-started from the previous command and joint
+  setpoints are ramped across the control period, as the real Panda's 1 kHz controller does; both
+  fixed failures that looked like retargeting problems (see above).
 * **Grasp stabiliser (a disclosed simplification).** Menagerie's fingertips have small "bump"
   colliders whose corners wedge cylinders sideways; I removed them. Even with flat pads, MuJoCo's
   soft contacts let a pinched piece creep ~1 cm along the pads during fast transport, independent of
@@ -181,13 +210,15 @@ environment rather than by the robot.
 | | |
 |---|---|
 | Plies | 33 (one castling, twelve captures) |
-| Single-piece moves succeeding unassisted | 29 / 34 (85 %) |
-| Interventions (a piece snapped back onto its square so the game can continue) | 6 |
+| Single-piece moves succeeding unassisted | 34 / 34 |
+| Interventions (a piece snapped back onto its square so the game can continue) | 0 |
+| Same game with 10 different random choices of which demo to replay per move | 340 / 340 moves, 0 interventions |
 
-The failures cluster in the crowded endgame: captures and long moves to the back rank
-(Qxf3, Rxd7, Qb8+, Nxb8, Rd8#). My demonstrations were recorded on sparse boards with three
-pieces, so a full board is a real distribution shift for motions that were never meant to thread
-between neighbours.
+The first version needed 6 interventions, all in the crowded parts of the game: neighbours
+knocked by an open finger, a rook carried off on one finger, misses on the back rank. Every one
+traced back to the simulator and controller bugs above. My demonstrations were recorded on
+sparse boards with three pieces, so a full board is still the hardest setting for motions that
+were never meant to thread between neighbours.
 
 ## What worked, what didn't
 
@@ -202,11 +233,14 @@ between neighbours.
 **Didn't work, or only partly**
 * Grasp detection from finger closure alone: it fails on pinch grasps (the fingers barely move
   and relax during the carry). The task labels fixed it.
-* Naive retargeting (30.8 %), for the reasons above.
+* Naive retargeting (27.7 %), for the reasons above.
 * Pure contact physics for carrying pieces: see the grasp stabiliser note.
 * The first object-centric version opened the gripper while the arm was still moving (54 %).
-* Crowded full boards are harder than the sparse boards in the demos: palm clearance and
-  occasional knocked neighbours; the game script counts every intervention.
+* Trusting my simulator: the last 5 % of retargeting failures, and every intervention in the full
+  game, were bugs in the finger coupling and the arm controller, not in the method. Tracing
+  individual failures (contacts, joint torques) found them; tuning the retargeter would not have.
+* Crowded full boards are harder than the sparse boards in the demos; the game script counts
+  every intervention (now zero, but the margin around neighbours is a few millimetres).
 
 **Limitations**
 * The compact policy reads a parsed instruction and proprioception, not images; SmolVLA is the

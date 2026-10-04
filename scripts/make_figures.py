@@ -53,7 +53,7 @@ def retargeting():
         vals = [np.mean([r["success"] for r in res[m] if g == "all" or r["piece"] == g]) * 100 for g in groups]
         bars = ax.bar(x + (i - 0.5) * w, vals, w, color=SERIES[1 - i], edgecolor=SURFACE, linewidth=2, label=label)
         b = bars[-1]  # direct label on the headline group only
-        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 1.5, f"{vals[-1]:.0f}%", ha="center",
+        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 1.5, f"{vals[-1]:.1f}%", ha="center",
                 va="bottom", fontsize=10, color=INK)
     n = len(res["naive"])
     ax.set_xticks(x, [g.capitalize() if g != "all" else "All moves" for g in groups])
