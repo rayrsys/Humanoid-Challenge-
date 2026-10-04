@@ -22,3 +22,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["chessbot"]
+
+[tool.pytest.ini_options]
+markers = ["slow: needs MuJoCo + the Menagerie Panda"]
