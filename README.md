@@ -30,7 +30,7 @@ only used to test the simulator.
 | Naive retargeting (copy the hand path) | **27.7 %** of 675 demos succeed on the Panda |
 | Object-centric retargeting (keeps the human's timing, path and yaw) | **99.9 %** succeed (674 / 675) |
 | Board-symmetry augmentation | 499 human demos → **3 195** sim-verified training episodes (augmented copies succeed as often as originals: 99.9 % vs 99.3 %) |
-| Policy trained on them, closed loop | **85 % / 78 % / 70 %** on seen tasks / unseen square pairs / squares never seen in training (flat square embeddings: 0 % on unseen squares; no augmentation: ≤ 18 %) |
+| Policy trained on them, closed loop | **92 % / 88 % / 77 %** on seen tasks / unseen square pairs / squares never seen in training (flat square embeddings: 0 % on unseen squares; no augmentation: ≤ 22 %) |
 | Whole game | Morphy's *Opera Game* (1858), 33 plies played with my recorded hand motions: **34 / 34** piece moves, **no interventions**, on each of 10 random choices of which demo is replayed per move |
 
 ---
@@ -195,7 +195,9 @@ combinations are held out among the rest.
 The instruction is parsed into piece, colour, source and destination; the network sees the
 end-effector state and predicts 10-step chunks of Cartesian commands (receding horizon). Squares
 are encoded either **factorised** (file embedding + rank embedding) or **flat** (one embedding per
-square).
+square). The predicted gripper width is executed as closed or open, because that is all any demo
+ever commands; executing it as predicted instead gives 85 / 78 / 70 % for the best policy, as
+in-between widths near a grasp can reopen the fingers.
 
 <p align="center"><img src="docs/fig_policies.png" width="760"></p>
 
@@ -205,16 +207,16 @@ seed each (with n = 60 the standard error is about ±6 points):
 | Policy | Training episodes | Seen tasks | Unseen square pairs | Unseen squares |
 |---|---|---|---|---|
 | *Retargeted human replay (reference, not a policy)* | | *100 %* | *100 %* | *100 %* |
-| **Augmented · factorised squares** | 3 195 | **85.0 %** | **78.3 %** | **70.0 %** |
-| Augmented · flat squares | 3 195 | 60.0 % | 43.3 % | 0.0 % |
-| Human only · factorised squares | 499 | 16.7 % | 0.0 % | 3.3 % |
+| **Augmented · factorised squares** | 3 195 | **91.7 %** | **88.3 %** | **76.7 %** |
+| Augmented · flat squares | 3 195 | 85.0 % | 63.3 % | 0.0 % |
+| Human only · factorised squares | 499 | 21.7 % | 1.7 % | 3.3 % |
 | Human only · flat squares | 499 | 18.3 % | 0.0 % | 0.0 % |
 
 Two things stand out. **Augmentation is what makes learning work**: 499 human demonstrations, one
 per move, are far too few for a policy to learn where 64 squares are, while their symmetric copies
 are enough. And **the square encoding decides generalisation**: with one embedding per square, a
 square never seen in training is simply unknown (0 %); composing it from a seen file and a seen
-rank gets 70 %.
+rank gets 77 %.
 
 <p align="center"><img src="docs/policy_in_action.gif" width="560"><br>
 <em>The factorised policy given only the instruction and the gripper state: a seen task, an unseen
