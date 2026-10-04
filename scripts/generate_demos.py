@@ -52,7 +52,8 @@ def rollout(env, ht, speed=1.0):
 
     e = ht.episode
     env.reset(fen=e.fen)
-    actions = retarget_object_centric(ht, env.geom, speed, trim=True, obstacles=obstacles(env, e.src))
+    actions = retarget_object_centric(ht, env.geom, speed, trim=True, obstacles=obstacles(env, e.src),
+                                      start=env.cmd)
     states, cmds = [], []
     for a in actions:
         states.append(env.ee_state())

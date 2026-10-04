@@ -23,7 +23,7 @@ import numpy as np
 @dataclass
 class MoveOutcome:
     move: str
-    primitives: list = field(default_factory=list)  # (uci, success, placement_error)
+    primitives: list = field(default_factory=list)  # (uci, success, placement_error, failure_reason)
 
     @property
     def success(self) -> bool:
@@ -34,7 +34,10 @@ def _primitive(env, mover, a: int, b: int, out: MoveOutcome) -> bool:
     uci = chess.square_name(a) + chess.square_name(b)
     mover(env, a, b)
     res = env.check_move(chess.Move(a, b))
-    out.primitives.append((uci, res.success, res.placement_error))
+    why = {"knocked a piece": f"knocked {', '.join(res.disturbed)}",
+           "wrong square": f"landed on {res.placed_square}",
+           "off-centre": f"off-centre {res.placement_error * 1000:.0f} mm"}.get(res.failure, res.failure)
+    out.primitives.append((uci, res.success, res.placement_error, why))
     # Keep the logical map in sync with where the piece physically is.
     env.occupant[b] = env.occupant.pop(a)
     return res.success

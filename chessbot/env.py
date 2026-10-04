@@ -43,11 +43,16 @@ class MoveResult:
     upright: bool
     disturbed: list  # names of other pieces knocked off their squares
     released: bool
+    failure: str = ""  # why it failed: one of FAILURES, "" on success
 
     def as_dict(self) -> dict:
         return dict(success=self.success, placed_square=self.placed_square,
                     placement_error=self.placement_error, upright=self.upright,
-                    disturbed=self.disturbed, released=self.released)
+                    disturbed=self.disturbed, released=self.released, failure=self.failure)
+
+
+FAILURES = ("stuck to gripper", "dropped", "tipped over", "not set down", "knocked a piece",
+            "wrong square", "off-centre")
 
 
 class ChessEnv:
@@ -86,7 +91,7 @@ class ChessEnv:
         rng = np.random.default_rng(seed)
         m, d = self.model, self.data
         mujoco.mj_resetData(m, d)
-        d.eq_active[:] = 0
+        d.eq_active[list(self.hold_eq.values())] = 0  # keep Menagerie's finger coupling active
         self.held = None
         d.qpos[self.ik.qadr] = HOME_QPOS
         d.qpos[self.finger_qadr] = GRIPPER_OPEN
@@ -143,12 +148,21 @@ class ChessEnv:
         d_yaw = np.clip(d_yaw, -self.max_yaw_step, self.max_yaw_step)
         self.cmd = np.concatenate([self.cmd[:3] + d_pos, [self.cmd[3] + d_yaw, a[4]]])
 
-        q0 = self.data.qpos[self.ik.qadr]
+        # Warm-start from the previous *commanded* joints, not the measured
+        # ones: near the shoulder singularity (joint 2 ~ 0, joints 1 and 3
+        # aligned) re-solving from the measured state feeds the arm's own
+        # tracking error back into the target and the pair starts to chatter.
+        q0 = self.data.ctrl[:7].copy()
         q, _ = self.ik.solve(q0, self.geom.to_world(self.cmd[:3]), grasp_rotation(self.cmd[3]))
-        self.data.ctrl[:7] = q
         self.data.ctrl[7] = 255.0 * self.cmd[4] / MAX_WIDTH
         self._update_grasp()
-        mujoco.mj_step(self.model, self.data, nstep=self.n_substeps)
+        # Ramp the joint setpoints over the control period (as the Panda's
+        # 1 kHz controller does) instead of stepping them every 50 ms: a step
+        # saturates the 87 Nm shoulder joints, and saturated actuators lose
+        # the implicit integrator's damping.
+        for k in range(1, self.n_substeps + 1):
+            self.data.ctrl[:7] = q0 + (q - q0) * (k / self.n_substeps)
+            mujoco.mj_step(self.model, self.data)
         self.t += 1
         return self.observe()
 
@@ -250,7 +264,8 @@ class ChessEnv:
         ok, err, upright = self._in_square(name, move.to_square, tol)
         p, _ = self.piece_pose(name)
         placed = self.geom.xy_to_square(p[:2])
-        released = not self._touching_gripper(name) and p[2] < 0.01
+        touching = self._touching_gripper(name)
+        released = not touching and p[2] < 0.01
         disturbed = []
         for sq, other in self.occupant.items():
             if other == name or sq == move.to_square:
@@ -258,9 +273,13 @@ class ChessEnv:
             o_ok, _, o_up = self._in_square(other, sq, tol)
             if not (o_ok and o_up):
                 disturbed.append(other)
-        return MoveResult(bool(ok and upright and released and not disturbed),
-                          chess.square_name(placed) if placed is not None else None,
-                          err, upright, disturbed, released)
+        success = bool(ok and upright and released and not disturbed)
+        failure = ("" if success else "stuck to gripper" if touching else
+                   ("tipped over" if placed == move.to_square else "dropped") if not upright else
+                   "not set down" if not released else "knocked a piece" if disturbed else
+                   "wrong square" if placed != move.to_square else "off-centre")
+        return MoveResult(success, chess.square_name(placed) if placed is not None else None,
+                          err, upright, disturbed, released, failure)
 
     def _touching_gripper(self, name: str) -> bool:
         b = self.body[name]

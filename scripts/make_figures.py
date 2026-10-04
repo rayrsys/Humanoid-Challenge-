@@ -167,7 +167,7 @@ def side_by_side(episodes=((("right", 0)), ("right", 105)), out="fig_teleop_vs_p
         ht = extract(e, BoardCalibration.load(f"calib/board_{arm}.json"))
         env.reset(fen=e.fen)
         acts, src_idx = retarget_object_centric(ht, env.geom, trim=True, obstacles=obstacles(env, e.src),
-                                                return_source_index=True)
+                                                start=env.cmd, return_source_index=True)
         tg, tr = ht.t_grasp, ht.t_release
         keys = [tg, (tg + tr) // 2, tr]
         # Panda step where each key frame is reached (first step retargeted from it or later).

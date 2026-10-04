@@ -119,7 +119,8 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
                             blend_s: float = 0.8, funnel_s: float = 0.6, lift_s: float = 0.4,
                             dwell_s: float = 0.4, arrive_s: float = 0.3, hover: float = 0.05,
                             carry_z: float = 0.12, trim: bool = False, lead_s: float = 1.0,
-                            tail_s: float = 0.6, obstacles=(), yaw_fn=None, return_source_index: bool = False):
+                            tail_s: float = 0.6, obstacles=(), yaw_fn=None, v_max: float = 0.3,
+                            yaw_rate_max: float = 2.0, start=None, return_source_index: bool = False):
     """Human timing, path shape and yaw; Panda-appropriate contact funnels.
 
     Phases (dataset frames): approach | pre-grasp funnel | grasp dwell | lift |
@@ -128,6 +129,13 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
     ``trim`` drops the G1's rest pose: the sequence starts ``lead_s`` before
     the pre-grasp funnel and ends ``tail_s`` after the retreat (the Panda
     starts from its own home pose, so the G1's is meaningless here).
+    The result is retimed so it never asks for more than ``v_max`` (m/s) or
+    ``yaw_rate_max`` (rad/s), below the env's rate limits: a human hand is
+    faster than a Panda, and a target that runs ahead of the arm makes the
+    rate limiter cut corners (e.g. descending onto a tall piece before the
+    hand is over it). ``start`` ([x, y, z, yaw], the arm's current command)
+    prepends a transit from there: up to carry height, across, and down onto
+    the human path, so the first step is not a jump the arm has to chase.
     """
     T = len(ht.fr)
     k = geom.scale
@@ -160,16 +168,20 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
             near = np.linalg.norm(q[idx, :2] - xy, axis=1) < 1.2 * S
             q[idx, 2] = np.where(near, np.maximum(q[idx, 2], max(h + 0.015, z_hover)), q[idx, 2])
 
+    def hover_z(xy):
+        """Height to hover at over ``xy``: above the target piece and every neighbour."""
+        return max([z_hover] + [h + 0.015 for o, h in obstacles if np.linalg.norm(np.asarray(o) - xy) < 1.2 * S])
+
     nf = min(int(funnel_s * FPS), tg)
     nl = int(lift_s * FPS)
     nf_r = min(int(funnel_s * FPS), max(1, tr - tg - nl - 1))
     piece_h = shape.height * k
-    clear_open(np.arange(0, tg - nf), extra=[(tgt_g[:2], piece_h)])
+    clear_open(np.arange(0, tg - nf + 1), extra=[(tgt_g[:2], piece_h)])
     clear_open(np.arange(min(tr + nl, T - 1), T), extra=[(tgt_r[:2], piece_h)])
 
     # 3. Pre-grasp funnel: rise if low, move over the piece, descend vertically.
     p0 = q[tg - nf].copy()
-    z_safe = max(p0[2], z_hover)
+    z_safe = max(p0[2], hover_z(p0[:2]), hover_z(tgt_g[:2]))
     q[tg - nf: tg + 1] = _polyline([p0, [*p0[:2], z_safe], [*tgt_g[:2], z_safe], tgt_g],
                                    [0.0, 0.2, 0.6, 1.0], nf + 1)
     # 4. Lift vertically, carry above every standing piece, pre-place funnel.
@@ -180,7 +192,7 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
     q[tr - nf_r: tr + 1] = _polyline([p1, [*tgt_r[:2], max(p1[2], carry_z)], tgt_r], [0.0, 0.55, 1.0], nf_r + 1)
     # 5. Retreat vertically before rejoining the human path.
     r_end = min(tr + nl, T - 1)
-    q[tr: r_end + 1] = _polyline([tgt_r, [*tgt_r[:2], z_hover]], [0.0, 1.0], r_end - tr + 1)
+    q[tr: r_end + 1] = _polyline([tgt_r, [*tgt_r[:2], hover_z(tgt_r[:2])]], [0.0, 1.0], r_end - tr + 1)
 
     # Yaw: the human's, held constant from the funnel through the carry.
     yaw = np.unwrap(_heading_to_yaw(ht.heading) * 2) / 2
@@ -209,9 +221,33 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
         first = max(0, tg - nf - int(lead_s * FPS))
         last = min(len(out), j + na + nd + nl + int(tail_s * FPS))
         out, idx = out[first:last], idx[first:last]
-    n = _n_steps(len(out), speed)
-    res = _resample(out, n)
+    if start is not None:
+        s0 = np.asarray(start, float)[:4].copy()
+        s0[3] = out[0, 3] + (s0[3] - out[0, 3] + np.pi) % (2 * np.pi) - np.pi
+        z_up = max(s0[2], out[0, 2], carry_z)
+        transit = np.array([[*s0, pre_w], [*s0[:2], z_up, s0[3], pre_w], [*out[0, :2], z_up, out[0, 3], pre_w]])
+        out, idx = np.concatenate([transit, out]), np.concatenate([np.full(3, idx[0]), idx])
+    res, src = _retime(out, speed, v_max, yaw_rate_max)
     res[:, 4] = np.where(res[:, 4] < 0.5 * pre_w, 0.0, pre_w)
     if return_source_index:  # dataset frame each Panda step was retargeted from
-        return res, idx[np.round(np.linspace(0, len(idx) - 1, n)).astype(int)]
+        return res, idx[src]
     return res
+
+
+def _retime(seq: np.ndarray, speed: float, v_max: float, yaw_rate_max: float):
+    """Resample a dataset-rate [x, y, z, yaw, width] sequence to the control rate.
+
+    Keeps the human's timing (scaled by ``speed``) except where it would be
+    faster than ``v_max`` / ``yaw_rate_max``; there time is stretched. Returns
+    the resampled sequence and, per control step, the nearest input frame.
+    """
+    dt = np.maximum.reduce([np.full(len(seq) - 1, 1.0 / (FPS * speed)),
+                            np.linalg.norm(np.diff(seq[:, :3], axis=0), axis=1) / v_max,
+                            np.abs(np.diff(seq[:, 3])) / yaw_rate_max])
+    t = np.concatenate([[0.0], np.cumsum(dt)])
+    n = max(2, int(round(t[-1] * CONTROL_HZ)) + 1)
+    tq = np.linspace(0.0, t[-1], n)
+    res = np.stack([np.interp(tq, t, seq[:, i]) for i in range(seq.shape[1])], 1)
+    nearest = np.clip(np.searchsorted(t, tq), 1, len(t) - 1)
+    nearest -= (tq - t[nearest - 1]) < (t[nearest] - tq)
+    return res, nearest

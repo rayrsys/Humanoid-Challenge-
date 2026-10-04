@@ -83,7 +83,8 @@ class HumanMotionPlayer:
             best = max(YAW_CANDIDATES, key=lambda y: (gap(y) >= 0.004, -abs(np.angle(np.exp(2j * (y - yaw_g))))))
             return best, best
 
-        return retarget_object_centric(moved, env.geom, trim=True, obstacles=obstacles, yaw_fn=safe_yaw)
+        return retarget_object_centric(moved, env.geom, trim=True, obstacles=obstacles, yaw_fn=safe_yaw,
+                                       start=env.cmd)
 
     def mover(self, env, a: int, b: int, on_step=None):
         """``game.execute_move``-compatible mover."""

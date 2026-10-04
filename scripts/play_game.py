@@ -106,7 +106,7 @@ def main():
     for ply, mv in enumerate(moves):
         san = env.board.san(mv)
         out = execute_move(env, mv, mover)
-        for uci, ok, err in out.primitives:
+        for uci, ok, err, *_ in out.primitives:
             if not ok:
                 interventions += 1
                 snap(env, chess.parse_square(uci[2:]))
@@ -117,7 +117,7 @@ def main():
                 interventions += 1
                 snap(env, sq)
         log.append(dict(ply=ply + 1, san=san, primitives=out.primitives))
-        status = "ok" if out.success else "FIXED"
+        status = "ok" if out.success else "FIXED (" + "; ".join(p[3] for p in out.primitives if not p[1]) + ")"
         print(f"{ply // 2 + 1}{'.' if ply % 2 == 0 else '...'} {san:8s} {status}", flush=True)
     n_prim = sum(len(x["primitives"]) for x in log)
     n_ok = sum(p[1] for x in log for p in x["primitives"])

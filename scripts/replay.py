@@ -61,7 +61,8 @@ def run_one(job):
     if _W["mode"] == "naive":
         actions = retarget_naive(ht, env.geom, _W["speed"])
     else:
-        actions = retarget_object_centric(ht, env.geom, _W["speed"], obstacles=obstacles(env, e.src))
+        actions = retarget_object_centric(ht, env.geom, _W["speed"], obstacles=obstacles(env, e.src),
+                                          start=env.cmd)
     frames = []
     for a in actions:
         env.step(a)
@@ -117,10 +118,7 @@ def main():
     fails = defaultdict(int)
     for r in results:
         if not r["success"]:
-            why = ("not released" if not r["released"] else "tipped over" if not r["upright"]
-                   else "knocked other piece" if r["disturbed"] else
-                   f"wrong square ({r['placed_square']})" if r["placed_square"] != r["dst"] else "off-centre")
-            fails[why.split(" (")[0]] += 1
+            fails[r["failure"]] += 1
     print("  failure modes:", dict(fails))
     print("wrote", out)
 
