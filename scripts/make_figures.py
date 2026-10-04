@@ -67,8 +67,10 @@ def retargeting():
     plt.close(fig)
 
 
-def policies(eval_path="outputs/eval.json"):
+def policies(eval_path="outputs/eval.json", seeds_path="outputs/eval_seeds.json"):
     table = json.loads(Path(eval_path).read_text())
+    extra = json.loads(Path(seeds_path).read_text()) if Path(seeds_path).exists() else {}
+    runs = {k: [v] + [extra[n] for n in sorted(extra) if n.startswith(k + "_s")] for k, v in table.items()}
     splits = [("train", "Seen tasks"), ("unseen_pair", "Unseen square pairs"), ("unseen_square", "Unseen squares")]
     models = [("aug_factorised", "Augmented · factorised squares"), ("aug_flat", "Augmented · flat squares"),
               ("human_factorised", "Human only · factorised"), ("human_flat", "Human only · flat")]
@@ -77,12 +79,15 @@ def policies(eval_path="outputs/eval.json"):
     fig, ax = _fig(9.0, 4.4)
     x = np.arange(len(splits))
     w = 0.8 / len(models)
+    n_seeds = min(len(runs[k]) for k, _ in models)
     for i, (k, label) in enumerate(models):
-        vals = [table[k][s] * 100 for s, _ in splits]
+        per_seed = np.array([[r[s] * 100 for s, _ in splits] for r in runs[k]])
+        vals, lo, hi = per_seed.mean(0), per_seed.min(0), per_seed.max(0)
         bars = ax.bar(x - 0.4 + (i + 0.5) * w, vals, min(w, 0.2), color=SERIES[i], edgecolor=SURFACE, linewidth=2,
-                      label=label)
-        for b, v in zip(bars, vals):
-            ax.text(b.get_x() + b.get_width() / 2, v + 1.2, f"{v:.0f}", ha="center", va="bottom", fontsize=8.5,
+                      label=label, yerr=[vals - lo, hi - vals] if len(per_seed) > 1 else None,
+                      error_kw=dict(ecolor=INK2, elinewidth=1, capsize=0))
+        for b, v, top in zip(bars, vals, hi):
+            ax.text(b.get_x() + b.get_width() / 2, top + 1.2, f"{v:.0f}", ha="center", va="bottom", fontsize=8.5,
                     color=INK2)
     if ref:
         for j, (s, _) in enumerate(splits):
@@ -92,7 +97,8 @@ def policies(eval_path="outputs/eval.json"):
     ax.set_ylim(0, 112)
     ax.set_yticks([0, 25, 50, 75, 100], ["0%", "25%", "50%", "75%", "100%"])
     _style(ax, "Closed-loop success of policies trained on retargeted demos",
-           "Same seeded task set per split; unseen squares never appear in training")
+           "Same seeded task set per split; unseen squares never appear in training" +
+           (f"; mean of {n_seeds} training seeds, whiskers span them" if n_seeds > 1 else ""))
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.0, 1.0), fontsize=9, labelcolor=INK2)
     fig.tight_layout()
     fig.savefig(DOCS / "fig_policies.png", facecolor=SURFACE)
