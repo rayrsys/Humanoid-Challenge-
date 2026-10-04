@@ -6,6 +6,11 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # run from anywhere, no install needed
+
 import argparse
 
 from huggingface_hub import snapshot_download

@@ -10,9 +10,13 @@ unseen squares) and LeRobot's own pre/post-processing pipeline, mirroring
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # run from anywhere, no install needed
+
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 

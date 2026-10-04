@@ -9,13 +9,17 @@ rates per arm and piece type.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # run from anywhere, no install needed
+
 import argparse
 import json
 import os
 import time
 from collections import defaultdict
 from multiprocessing import Pool
-from pathlib import Path
 
 import numpy as np
 

@@ -1,7 +1,8 @@
 # From a humanoid's hands to a Panda's gripper: chess moves learned from my Quest 3 teleoperation
 
-I collected **676 chess-move demonstrations with a Meta Quest 3**, teleoperating a Unitree G1
-humanoid with dexterous Dex3 hands (both arms, five piece types). This project uses that data to
+I collected **676 chess-move demonstrations with a Meta Quest 3**, teleoperating a simulated
+Unitree G1 humanoid with dexterous Dex3 hands (both arms, five piece types). The motion is real:
+my own hands, tracked by the headset; the robot it drove was simulated. This project uses that data to
 drive a **Franka Panda with a parallel-jaw gripper** in a MuJoCo chess simulator, and to train
 policies that execute language instructions such as *"Move the black knight from b8 to c6."*
 
@@ -28,7 +29,7 @@ pipeline closes that gap step by step and measures each step.
 
 | | |
 |---|---|
-| Hardware | Meta Quest 3 hand tracking → Unitree G1 (Dex3-1 hands), one arm at a time |
+| Hardware | Meta Quest 3 hand tracking → simulated Unitree G1 (Dex3-1 hands), one arm at a time |
 | Datasets | [`Raysolo/fb32-v03-all5-right`](https://huggingface.co/datasets/Raysolo/fb32-v03-all5-right), [`Raysolo/fb32-v03-all5-left`](https://huggingface.co/datasets/Raysolo/fb32-v03-all5-left) (LeRobot v3) |
 | Size | 676 episodes (338 per arm), 180 k frames at 50 Hz, ≈ 5 s per move |
 | Tasks | knight, bishop, rook, queen, king; white and black; one move per episode on a sparse board, with a language instruction and the starting FEN |
