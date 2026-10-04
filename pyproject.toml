@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 train = ["torch>=2.2"]
 figures = ["matplotlib"]
-vla = ["lerobot[smolvla]>=0.4"]
+vla = ["lerobot[smolvla]==0.4.4"]
 dev = ["pytest"]
 
 [build-system]

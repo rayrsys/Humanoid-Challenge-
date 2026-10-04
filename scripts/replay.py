@@ -98,6 +98,8 @@ def main():
         jobs += [(a, i) for i in (idxs[: args.limit] if args.limit else idxs)]
     record = {j for a in arms for j in [x for x in jobs if x[0] == a][: args.videos]}
     t0 = time.time()
+    from chessbot.assets import panda_dir
+    panda_dir()  # fetch the robot model once, before workers start
     with Pool(args.workers, initializer=_init, initargs=(args.mode, args.speed, args.data, record)) as pool:
         results = pool.map(run_one, jobs, chunksize=4)
     Path("outputs").mkdir(exist_ok=True)

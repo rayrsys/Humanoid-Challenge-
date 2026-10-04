@@ -95,6 +95,8 @@ def main():
                                use_videos=True, vcodec=args.vcodec, image_writer_threads=4)
     dropped, written, t0 = 0, 0, time.time()
     chunk = 2 * args.workers  # bounded memory: render a chunk, write it, repeat
+    from chessbot.assets import panda_dir
+    panda_dir()  # fetch the robot model once, before workers start
     with Pool(args.workers, initializer=_init, initargs=(s,)) as pool:
         for i in range(0, len(recs), chunk):
             for task, front, wrist, state, action, ok in pool.map(_render, recs[i: i + chunk]):

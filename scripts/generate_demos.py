@@ -131,6 +131,8 @@ def main():
                 jobs.append((key, *cands[i]))
     print(f"{len(jobs)} rollouts to run")
     t0 = time.time()
+    from chessbot.assets import panda_dir
+    panda_dir()  # fetch the robot model once, before workers start
     with Pool(args.workers, initializer=_init, initargs=(args.data,)) as pool:
         recs = [r for r in pool.imap_unordered(work, jobs, chunksize=8) if r is not None]
     kept = [r for r in recs if r["success"]]

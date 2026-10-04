@@ -102,6 +102,8 @@ def _run(job):
 
 def evaluate(ckpt, tasks, workers, data):
     jobs = [(sp, t) for sp in SPLITS for t in tasks[sp]]
+    from chessbot.assets import panda_dir
+    panda_dir()  # fetch the robot model once, before workers start
     with Pool(workers, initializer=_init, initargs=(ckpt, data)) as pool:
         return pool.map(_run, jobs, chunksize=2)
 
