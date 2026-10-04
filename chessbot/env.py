@@ -57,7 +57,10 @@ FAILURES = ("stuck to gripper", "dropped", "tipped over", "not set down", "knock
 
 class ChessEnv:
     def __init__(self, geom: BoardGeometry | None = None, cameras=("front", "wrist"),
-                 image_size=(224, 224), max_speed: float = 0.4, max_yaw_rate: float = 3.0):
+                 image_size=(224, 224), max_speed: float = 0.4, max_yaw_rate: float = 3.0,
+                 couple_fingers: bool = True, ik_warm_start: bool = True, ramp_setpoints: bool = True):
+        # The last three exist only for scripts/ablate_fixes.py; leave them on.
+        self.couple_fingers, self.ik_warm_start, self.ramp_setpoints = couple_fingers, ik_warm_start, ramp_setpoints
         self.geom = geom or BoardGeometry()
         self.model = build_model(self.geom)
         self.data = mujoco.MjData(self.model)
@@ -76,6 +79,7 @@ class ChessEnv:
         self.dadr = {n: self.model.joint(f"{n}_free").dofadr[0] for n in self.names}
         self.finger_qadr = [self.model.joint(f"finger_joint{i}").qposadr[0] for i in (1, 2)]
         self.hold_eq = {n: self.model.equality(f"{n}_hold").id for n in self.names}
+        self.finger_eq = [i for i in range(self.model.neq) if self.model.eq_type[i] == mujoco.mjtEq.mjEQ_JOINT]
         self.hand = self.model.body("hand").id
         self.fingers = (self.model.body("left_finger").id, self.model.body("right_finger").id)
         self.held: str | None = None
@@ -91,7 +95,8 @@ class ChessEnv:
         rng = np.random.default_rng(seed)
         m, d = self.model, self.data
         mujoco.mj_resetData(m, d)
-        d.eq_active[list(self.hold_eq.values())] = 0  # keep Menagerie's finger coupling active
+        d.eq_active[list(self.hold_eq.values())] = 0
+        d.eq_active[self.finger_eq] = int(self.couple_fingers)  # Menagerie's coupling of the two fingers
         self.held = None
         d.qpos[self.ik.qadr] = HOME_QPOS
         d.qpos[self.finger_qadr] = GRIPPER_OPEN
@@ -153,16 +158,21 @@ class ChessEnv:
         # aligned) re-solving from the measured state feeds the arm's own
         # tracking error back into the target and the pair starts to chatter.
         q0 = self.data.ctrl[:7].copy()
-        q, _ = self.ik.solve(q0, self.geom.to_world(self.cmd[:3]), grasp_rotation(self.cmd[3]))
+        seed = q0 if self.ik_warm_start else self.data.qpos[self.ik.qadr]
+        q, _ = self.ik.solve(seed, self.geom.to_world(self.cmd[:3]), grasp_rotation(self.cmd[3]))
         self.data.ctrl[7] = 255.0 * self.cmd[4] / MAX_WIDTH
         self._update_grasp()
         # Ramp the joint setpoints over the control period (as the Panda's
         # 1 kHz controller does) instead of stepping them every 50 ms: a step
         # saturates the 87 Nm shoulder joints, and saturated actuators lose
         # the implicit integrator's damping.
-        for k in range(1, self.n_substeps + 1):
-            self.data.ctrl[:7] = q0 + (q - q0) * (k / self.n_substeps)
-            mujoco.mj_step(self.model, self.data)
+        if self.ramp_setpoints:
+            for k in range(1, self.n_substeps + 1):
+                self.data.ctrl[:7] = q0 + (q - q0) * (k / self.n_substeps)
+                mujoco.mj_step(self.model, self.data)
+        else:
+            self.data.ctrl[:7] = q
+            mujoco.mj_step(self.model, self.data, nstep=self.n_substeps)
         self.t += 1
         return self.observe()
 

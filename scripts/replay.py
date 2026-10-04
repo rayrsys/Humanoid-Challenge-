@@ -27,12 +27,13 @@ DATASETS = {"right": "fb32-v03-all5-right", "left": "fb32-v03-all5-left"}
 _W = {}
 
 
-def _init(mode, speed, data, record):
+def _init(mode, speed, data, record, env_kw=None, retarget_kw=None):
     from chessbot.calibration import BoardCalibration
     from chessbot.env import ChessEnv
     from chessbot.quest_data import load_dataset
 
-    _W["env"] = ChessEnv(cameras=())
+    _W["env"] = ChessEnv(cameras=(), **(env_kw or {}))
+    _W["retarget_kw"] = retarget_kw or {}
     _W["cal"] = {a: BoardCalibration.load(f"calib/board_{a}.json") for a in DATASETS}
     _W["eps"] = {a: {e.index: e for e in load_dataset(n, data)} for a, n in DATASETS.items()}
     _W["mode"], _W["speed"], _W["record"] = mode, speed, record
@@ -62,7 +63,7 @@ def run_one(job):
         actions = retarget_naive(ht, env.geom, _W["speed"])
     else:
         actions = retarget_object_centric(ht, env.geom, _W["speed"], obstacles=obstacles(env, e.src),
-                                          start=env.cmd)
+                                          **{"start": env.cmd, **_W["retarget_kw"]})
     frames = []
     for a in actions:
         env.step(a)

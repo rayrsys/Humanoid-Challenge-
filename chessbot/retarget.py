@@ -120,7 +120,8 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
                             dwell_s: float = 0.4, arrive_s: float = 0.3, hover: float = 0.05,
                             carry_z: float = 0.12, trim: bool = False, lead_s: float = 1.0,
                             tail_s: float = 0.6, obstacles=(), yaw_fn=None, v_max: float = 0.3,
-                            yaw_rate_max: float = 2.0, start=None, return_source_index: bool = False):
+                            yaw_rate_max: float = 2.0, start=None, neighbour_clearance: bool = True,
+                            return_source_index: bool = False):
     """Human timing, path shape and yaw; Panda-appropriate contact funnels.
 
     Phases (dataset frames): approach | pre-grasp funnel | grasp dwell | lift |
@@ -170,13 +171,15 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
 
     def hover_z(xy):
         """Height to hover at over ``xy``: above the target piece and every neighbour."""
+        if not neighbour_clearance:  # ablation only
+            return z_hover
         return max([z_hover] + [h + 0.015 for o, h in obstacles if np.linalg.norm(np.asarray(o) - xy) < 1.2 * S])
 
     nf = min(int(funnel_s * FPS), tg)
     nl = int(lift_s * FPS)
     nf_r = min(int(funnel_s * FPS), max(1, tr - tg - nl - 1))
     piece_h = shape.height * k
-    clear_open(np.arange(0, tg - nf + 1), extra=[(tgt_g[:2], piece_h)])
+    clear_open(np.arange(0, tg - nf + int(neighbour_clearance)), extra=[(tgt_g[:2], piece_h)])
     clear_open(np.arange(min(tr + nl, T - 1), T), extra=[(tgt_r[:2], piece_h)])
 
     # 3. Pre-grasp funnel: rise if low, move over the piece, descend vertically.

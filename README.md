@@ -119,6 +119,24 @@ Almost none were retargeting problems:
 | hover above the tallest neighbour | 99.9 % | the open fingers could dip beside a neighbour before the pre-grasp funnel |
 | transit from the arm's current pose | 99.9 % | the first target of a move could be 50 cm from where the last one ended (matters in the game, not in single-move replays) |
 
+Because the order of fixes matters, I also removed each one from the final system on its own
+(`scripts/ablate_fixes.py`):
+
+| Final system without… | Replay success (675) | Failures |
+|---|---|---|
+| nothing removed | 99.9 % | off-centre 1 |
+| setpoint ramp | 97.3 % | off-centre 14, dropped 3, wrong square 1 |
+| speed cap | 97.2 % | dropped 10, off-centre 5, tipped over 3, stuck to a finger 1 |
+| neighbour clearance | 99.4 % | dropped 3, off-centre 1 |
+| start transit | 99.9 % | off-centre 1; in the full game 3 of 10 seeds then need an intervention (337 / 340 moves) |
+| IK warm start | 100 % | none |
+| finger coupling | 100 % | none |
+
+So two fixes are redundant once the others are in: the warm start only mattered while setpoints
+were stepped, and the coupling bug only carried pieces off after a grasp had already gone wrong
+for another reason. I kept both, as they are what the real hardware does (the Panda's fingers are
+mechanically coupled).
+
 
 ## 4. The simulator
 
@@ -261,6 +279,7 @@ export MUJOCO_GL=egl                                # osmesa on headless CPU, gl
 python scripts/calibrate_board.py                   # board pose from the demos -> calib/
 python scripts/replay.py --mode naive               # retargeting baseline
 python scripts/replay.py --mode object_centric
+python scripts/ablate_fixes.py                      # leave-one-out over the simulator/controller fixes
 python scripts/generate_demos.py --aug-per-demo 4   # sim-verified human + augmented rollouts
 python scripts/train_policy.py --encoding factorised --out checkpoints/aug_factorised.pt
 python scripts/eval_policy.py --reference --ckpt checkpoints/aug_factorised.pt --n 60
