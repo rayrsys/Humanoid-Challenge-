@@ -121,7 +121,7 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
                             carry_z: float = 0.12, trim: bool = False, lead_s: float = 1.0,
                             tail_s: float = 0.6, obstacles=(), yaw_fn=None, v_max: float = 0.3,
                             yaw_rate_max: float = 2.0, start=None, neighbour_clearance: bool = True,
-                            return_source_index: bool = False):
+                            canonical_yaw: bool = False, return_source_index: bool = False):
     """Human timing, path shape and yaw; Panda-appropriate contact funnels.
 
     Phases (dataset frames): approach | pre-grasp funnel | grasp dwell | lift |
@@ -137,6 +137,8 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
     hand is over it). ``start`` ([x, y, z, yaw], the arm's current command)
     prepends a transit from there: up to carry height, across, and down onto
     the human path, so the first step is not a jump the arm has to chase.
+    ``canonical_yaw`` mirrors the whole yaw track when the grasp yaw is negative
+    (see generate_demos.py: which hand demonstrated decides the sign).
     """
     T = len(ht.fr)
     k = geom.scale
@@ -202,6 +204,8 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
     yaw_g, yaw_r = yaw[tg], yaw[tg]
     if yaw_fn is not None:
         yaw_g, yaw_r = yaw_fn(yaw_g, yaw_r)
+    if canonical_yaw and (yaw_g + np.pi / 2) % np.pi - np.pi / 2 < 0:  # sign of the pi-periodic grasp yaw
+        yaw, yaw_g, yaw_r = -yaw, -yaw_g, -yaw_r
     w_hold = np.clip((t - (tg - nf)) / max(nf, 1), 0, 1)
     yaw_seq = np.where(t < tg, (1 - w_hold) * yaw + w_hold * yaw_g,
                        np.where(t <= tr, yaw_g, (1 - w_out) * yaw + w_out * yaw_g))

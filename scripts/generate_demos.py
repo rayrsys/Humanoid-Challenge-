@@ -52,11 +52,15 @@ def rollout(env, ht, speed=1.0):
 
     e = ht.episode
     env.reset(fen=e.fen)
-    # Start at the pre-grasp funnel (lead_s=0), not 1 s before it: where my hand
-    # happened to be a second before reaching is often off the board and cannot
-    # be predicted from the instruction, so a policy trained on it learns to wander.
-    actions = retarget_object_centric(ht, env.geom, speed, trim=True, lead_s=0.0, obstacles=obstacles(env, e.src),
-                                      start=env.cmd)
+    # Two things a policy cannot infer from the instruction are removed here:
+    # * where my hand rested a second before reaching (often off the board), by
+    #   starting at the pre-grasp funnel (lead_s=0);
+    # * the sign of the gripper yaw: left-hand demos grasp at about -0.9 rad,
+    #   right-hand ones at +0.7 and mirrored copies flip it, so a regression
+    #   policy averages them to a yaw no demo used. canonical_yaw keeps the
+    #   magnitude and timing of my wrist turn but always grasps at positive yaw.
+    actions = retarget_object_centric(ht, env.geom, speed, trim=True, lead_s=0.0, canonical_yaw=True,
+                                      obstacles=obstacles(env, e.src), start=env.cmd)
     states, cmds = [], []
     for a in actions:
         states.append(env.ee_state())
