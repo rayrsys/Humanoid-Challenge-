@@ -28,7 +28,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
     ap.add_argument("--n", type=int, default=30, help="tasks per split")
-    ap.add_argument("--max-steps", type=int, default=240)
+    ap.add_argument("--max-steps", type=int, default=300)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--size", type=int, default=256)
     ap.add_argument("--video", type=int, default=0, help="save videos of the first N tasks per split")

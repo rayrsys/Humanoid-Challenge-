@@ -52,7 +52,10 @@ def rollout(env, ht, speed=1.0):
 
     e = ht.episode
     env.reset(fen=e.fen)
-    actions = retarget_object_centric(ht, env.geom, speed, trim=True, obstacles=obstacles(env, e.src),
+    # Start at the pre-grasp funnel (lead_s=0), not 1 s before it: where my hand
+    # happened to be a second before reaching is often off the board and cannot
+    # be predicted from the instruction, so a policy trained on it learns to wander.
+    actions = retarget_object_centric(ht, env.geom, speed, trim=True, lead_s=0.0, obstacles=obstacles(env, e.src),
                                       start=env.cmd)
     states, cmds = [], []
     for a in actions:

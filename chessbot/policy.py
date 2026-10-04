@@ -119,7 +119,7 @@ class PolicyRunner:
         self.execute = execute
 
     @torch.no_grad()
-    def run(self, env, task: str, max_steps: int = 220, on_step=None) -> int:
+    def run(self, env, task: str, max_steps: int = 300, on_step=None) -> int:
         tok = torch.from_numpy(task_tokens(task))[None]
         prev = env.ee_state()
         steps = 0
