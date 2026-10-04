@@ -97,8 +97,8 @@ def policies(eval_path="outputs/eval.json", seeds_path="outputs/eval_seeds.json"
     ax.set_ylim(0, 112)
     ax.set_yticks([0, 25, 50, 75, 100], ["0%", "25%", "50%", "75%", "100%"])
     _style(ax, "Closed-loop success of policies trained on retargeted demos",
-           "Same seeded task set per split; unseen squares never appear in training" +
-           (f"; mean of {n_seeds} training seeds, whiskers span them" if n_seeds > 1 else ""))
+           (f"Mean of {n_seeds} training seeds (whiskers: range); " if n_seeds > 1 else "") +
+           "same seeded tasks; unseen squares never in training")
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.0, 1.0), fontsize=9, labelcolor=INK2)
     fig.tight_layout()
     fig.savefig(DOCS / "fig_policies.png", facecolor=SURFACE)

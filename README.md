@@ -30,7 +30,7 @@ only used to test the simulator.
 | Naive retargeting (copy the hand path) | **27.7 %** of 675 demos succeed on the Panda |
 | Object-centric retargeting (keeps the human's timing, path and yaw) | **99.9 %** succeed (674 / 675) |
 | Board-symmetry augmentation | 499 human demos → **3 195** sim-verified training episodes (augmented copies succeed as often as originals: 99.9 % vs 99.3 %) |
-| Policy trained on them, closed loop | **92 % / 88 % / 77 %** on seen tasks / unseen square pairs / squares never seen in training (flat square embeddings: 0 % on unseen squares; no augmentation: ≤ 22 %) |
+| Policy trained on them, closed loop | **91 % / 87 % / 83 %** on seen tasks / unseen square pairs / squares never seen in training, mean of 3 training seeds (flat square embeddings: 0 % on unseen squares; no augmentation: ≤ 24 %) |
 | Whole game | Morphy's *Opera Game* (1858), 33 plies played with my recorded hand motions: **34 / 34** piece moves, **no interventions**, on each of 10 random choices of which demo is replayed per move |
 
 ---
@@ -196,27 +196,27 @@ The instruction is parsed into piece, colour, source and destination; the networ
 end-effector state and predicts 10-step chunks of Cartesian commands (receding horizon). Squares
 are encoded either **factorised** (file embedding + rank embedding) or **flat** (one embedding per
 square). The predicted gripper width is executed as closed or open, because that is all any demo
-ever commands; executing it as predicted instead gives 85 / 78 / 70 % for the best policy, as
-in-between widths near a grasp can reopen the fingers.
+ever commands; executing it as predicted instead gave 85 / 78 / 70 % rather than 92 / 88 / 77 % for
+the best policy (seed 0), as in-between widths near a grasp can reopen the fingers.
 
 <p align="center"><img src="docs/fig_policies.png" width="760"></p>
 
-60 tasks per split, the same seeded tasks and starting positions for every model, one training
-seed each (with n = 60 the standard error is about ±6 points):
+60 tasks per split, the same seeded tasks and starting positions for every model, three training
+seeds each; mean and [range] over the seeds:
 
 | Policy | Training episodes | Seen tasks | Unseen square pairs | Unseen squares |
 |---|---|---|---|---|
 | *Retargeted human replay (reference, not a policy)* | | *100 %* | *100 %* | *100 %* |
-| **Augmented · factorised squares** | 3 195 | **91.7 %** | **88.3 %** | **76.7 %** |
-| Augmented · flat squares | 3 195 | 85.0 % | 63.3 % | 0.0 % |
-| Human only · factorised squares | 499 | 21.7 % | 1.7 % | 3.3 % |
-| Human only · flat squares | 499 | 18.3 % | 0.0 % | 0.0 % |
+| **Augmented · factorised squares** | 3 195 | **90.6 %** [88–92] | **87.2 %** [87–88] | **82.8 %** [77–92] |
+| Augmented · flat squares | 3 195 | 83.3 % [73–92] | 62.2 % [55–68] | 0.0 % [0–0] |
+| Human only · factorised squares | 499 | 23.9 % [22–28] | 3.3 % [2–5] | 5.0 % [3–7] |
+| Human only · flat squares | 499 | 16.7 % [12–20] | 1.1 % [0–3] | 0.0 % [0–0] |
 
 Two things stand out. **Augmentation is what makes learning work**: 499 human demonstrations, one
 per move, are far too few for a policy to learn where 64 squares are, while their symmetric copies
 are enough. And **the square encoding decides generalisation**: with one embedding per square, a
 square never seen in training is simply unknown (0 %); composing it from a seen file and a seen
-rank gets 77 %.
+rank gets 83 %.
 
 <p align="center"><img src="docs/policy_in_action.gif" width="560"><br>
 <em>The factorised policy given only the instruction and the gripper state: a seen task, an unseen
@@ -272,9 +272,10 @@ were never meant to thread between neighbours.
 * Crowded full boards are harder than the sparse boards in the demos; the game script counts
   every intervention (now zero, but the margin around neighbours is a few millimetres).
 * Training the policy on the replays as they were. Once the simulator was fixed, the factorised
-  policy fell to 33 % on seen tasks, against 85 % now. Rollouts began wherever my hand happened
-  to rest, and the grasp yaw had two modes the instruction cannot distinguish (which hand
-  demonstrated), so a regression policy averaged them and approached at a yaw no demo used. A
+  policy fell to 33 % on seen tasks (85 % after the fix, same evaluation). Rollouts began wherever
+  my hand happened to rest, and the grasp yaw had two modes the instruction cannot distinguish
+  (which hand demonstrated), so a regression policy averaged them and approached at a yaw no demo
+  used. A
   policy that can represent several modes (diffusion or a discretised action head) would be the
   principled fix; canonicalising the data was the quick one. (Before the simulator fixes, the
   same recipe gave 77 %; I suspect the buggy, uncoupled fingers forgave misaligned grasps, but did
