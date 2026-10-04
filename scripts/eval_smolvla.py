@@ -29,6 +29,8 @@ def main():
     ap.add_argument("--ckpt", required=True)
     ap.add_argument("--n", type=int, default=30, help="tasks per split")
     ap.add_argument("--max-steps", type=int, default=300)
+    ap.add_argument("--continuous-gripper", dest="binary_gripper", action="store_false",
+                    help="execute predicted gripper widths as is (default: snap to closed/open like the demos)")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--size", type=int, default=256)
     ap.add_argument("--video", type=int, default=0, help="save videos of the first N tasks per split")
@@ -44,6 +46,7 @@ def main():
     from chessbot.augment import transform
     from chessbot.calibration import BoardCalibration
     from chessbot.env import ChessEnv
+    from chessbot.policy import binarise_gripper
     from chessbot.quest_data import load_dataset
     from chessbot.retarget import extract
     from scripts.eval_policy import DATASETS, SPLITS, eval_tasks
@@ -83,7 +86,8 @@ def main():
                 }
                 with torch.inference_mode():
                     action = post(policy.select_action(pre(batch)))
-                obs = env.step(action[0].detach().cpu().numpy())
+                a = action[0].detach().cpu().numpy()
+                obs = env.step(binarise_gripper(a) if args.binary_gripper else a)
                 if k < args.video:
                     frames.append(env.render("player", size=(360, 480)))
             r = env.check_move(chess.Move.from_uci(e.src + e.dst))

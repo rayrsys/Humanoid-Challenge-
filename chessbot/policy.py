@@ -29,6 +29,8 @@ TASK_RE = re.compile(r"Move the (white|black) (\w+) from ([a-h][1-8]) to ([a-h][
 # Normalisation for the board-frame action/state [x, y, z, yaw, width].
 POS_SCALE = np.array([0.2, 0.2, 0.1], np.float32)
 WIDTH_SCALE = 0.08
+GRIP_OPEN = 0.045       # widest pre-grasp opening in the demos (king)
+GRIP_THRESHOLD = 0.02   # below this a predicted width means "close"
 
 
 def parse_task(task: str) -> tuple[str, str, str, str]:
@@ -51,6 +53,13 @@ def encode_pose(p: np.ndarray) -> np.ndarray:
     p = np.asarray(p, np.float32)
     return np.concatenate([p[..., :3] / POS_SCALE, np.sin(2 * p[..., 3:4]), np.cos(2 * p[..., 3:4]),
                            p[..., 4:5] / WIDTH_SCALE], -1)
+
+
+def binarise_gripper(actions: np.ndarray) -> np.ndarray:
+    """Snap predicted widths to closed or open: the demos only ever command one of the two."""
+    actions = np.array(actions, copy=True)
+    actions[..., 4] = np.where(actions[..., 4] < GRIP_THRESHOLD, 0.0, GRIP_OPEN)
+    return actions
 
 
 def decode_pose(v: np.ndarray) -> np.ndarray:
@@ -114,9 +123,10 @@ def build_samples(records: list[dict], horizon: int):
 class PolicyRunner:
     """Closed-loop execution in ChessEnv with receding-horizon chunks."""
 
-    def __init__(self, model: TaskPolicy, execute: int = 5):
+    def __init__(self, model: TaskPolicy, execute: int = 5, binary_gripper: bool = True):
         self.model = model.eval()
         self.execute = execute
+        self.binary_gripper = binary_gripper
 
     @torch.no_grad()
     def run(self, env, task: str, max_steps: int = 300, on_step=None) -> int:
@@ -128,6 +138,8 @@ class PolicyRunner:
             pose = torch.from_numpy(encode_pose(cur))[None]
             delta = torch.from_numpy((encode_pose(cur) - encode_pose(prev)) * 10.0)[None]
             chunk = decode_pose(self.model(tok, pose, delta)[0].numpy())
+            if self.binary_gripper:
+                chunk = binarise_gripper(chunk)
             for a in chunk[: self.execute]:
                 prev = env.ee_state()
                 env.step(a)
