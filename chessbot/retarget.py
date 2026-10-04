@@ -119,7 +119,7 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
                             blend_s: float = 0.8, funnel_s: float = 0.6, lift_s: float = 0.4,
                             dwell_s: float = 0.4, arrive_s: float = 0.3, hover: float = 0.05,
                             carry_z: float = 0.12, trim: bool = False, lead_s: float = 1.0,
-                            tail_s: float = 0.6, obstacles=(), yaw_fn=None) -> np.ndarray:
+                            tail_s: float = 0.6, obstacles=(), yaw_fn=None, return_source_index: bool = False):
     """Human timing, path shape and yaw; Panda-appropriate contact funnels.
 
     Phases (dataset frames): approach | pre-grasp funnel | grasp dwell | lift |
@@ -208,7 +208,10 @@ def retarget_object_centric(ht: HumanTrajectory, geom: BoardGeometry, speed: flo
     if trim:
         first = max(0, tg - nf - int(lead_s * FPS))
         last = min(len(out), j + na + nd + nl + int(tail_s * FPS))
-        out = out[first:last]
-    res = _resample(out, _n_steps(len(out), speed))
+        out, idx = out[first:last], idx[first:last]
+    n = _n_steps(len(out), speed)
+    res = _resample(out, n)
     res[:, 4] = np.where(res[:, 4] < 0.5 * pre_w, 0.0, pre_w)
+    if return_source_index:  # dataset frame each Panda step was retargeted from
+        return res, idx[np.round(np.linspace(0, len(idx) - 1, n)).astype(int)]
     return res

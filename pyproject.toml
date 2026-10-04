@@ -10,10 +10,15 @@ dependencies = [
     "imageio",
     "imageio-ffmpeg",
     "pillow",
+    "pandas",
+    "pyarrow",
+    "huggingface_hub",
 ]
 
 [project.optional-dependencies]
 train = ["torch>=2.2"]
+figures = ["matplotlib"]
+vla = ["lerobot[smolvla]>=0.4"]
 dev = ["pytest"]
 
 [build-system]
